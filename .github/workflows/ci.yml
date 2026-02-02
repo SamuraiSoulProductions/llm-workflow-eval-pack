@@ -6,12 +6,12 @@ on:
   pull_request:
     branches: [ main, master ]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   eval-pack:
@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Compile Python files
+      - name: Syntax check
         run: python -m compileall .
 
       - name: Run evals
