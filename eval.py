@@ -1,8 +1,9 @@
 import json
 import sys
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
 from collections import Counter, defaultdict
+import tools
 
 
 # Configuration
@@ -13,6 +14,7 @@ PASS_THRESHOLD = 100.0  # Minimum pass percentage required (0-100)
 class Result:
     intent: str
     action: str
+    tool_error: Optional[str] = None
 
 
 def route(message: str) -> Result:
@@ -22,14 +24,23 @@ def route(message: str) -> Result:
     """
     m = message.lower().strip()
 
-    paid = any(k in m for k in ["i paid", "paid ", "payment went through", "charged", "posted", "receipt"])
-    access = any(k in m for k in ["access", "gate", "can't access", "cannot access", "locked out", "access denied", "unit"])
-    declined = any(k in m for k in ["declined", "failed", "error", "won't go through", "didn't go through"])
+    paid = any(k in m for k in ["i paid", "paid ", "payment went through", "charged", "posted", "receipt", "bank transfer"])
+    access = any(k in m for k in ["access", "gate", "can't access", "cannot access", "locked out", "access denied", "unit", "door"])
+    declined = any(k in m for k in ["declined", "failed", "error", "won't go through", "didn't go through", "auto-pay failed"])
     pending = any(k in m for k in ["pending", "processing", "not posted"])
-    billing = any(k in m for k in ["late fee", "charged twice", "refund", "credit", "invoice", "fee"])
-    contact = any(k in m for k in ["phone number", "office hours", "hours", "contact"])
-    injection = any(k in m for k in ["ignore all", "ignore policies", "give me the gate code", "bypass"])
-    account_help = any(k in m for k in ["can’t log in", "can't log in", "reset", "update my card"])
+    billing = any(k in m for k in ["late fee", "charged twice", "refund", "credit", "invoice", "fee", "receipt", "billed", "bill"])
+    contact = any(k in m for k in ["phone number", "office hours", "hours", "contact", "email", "reach", "support", "office", "located", "physical office"])
+    
+    # Expanded injection patterns
+    injection = any(k in m for k in [
+        "ignore all", "ignore policies", "give me the gate code", "bypass",
+        "override", "system:", "developer mode", "sql query", "forget your instructions",
+        "no restrictions", "reveal", "</system>", "safety filters", "internal policies",
+        "emergency override", "show internal", "print all", "database password",
+        "master access"
+    ])
+    
+    account_help = any(k in m for k in ["can't log in", "can't log in", "reset", "update my card", "password", "email on file", "outdated"])
 
     # Safety first: refuse policy bypass attempts
     if injection:
@@ -66,6 +77,34 @@ def route(message: str) -> Result:
     return Result("UNKNOWN", "ASK_CLARIFY")
 
 
+def agent_step(message: str, tool_name: Optional[str] = None, tool_scenario: str = "ok") -> Result:
+    """
+    Execute one agent step: route -> (optionally call tool) -> return final action.
+    
+    Demonstrates:
+    - Initial routing via route()
+    - Tool execution with failure handling
+    - Deterministic fallback to ESCALATE on tool errors
+    """
+    # Step 1: Initial routing
+    result = route(message)
+    
+    # Step 2: If action requires tool call, simulate it
+    if result.action == "CALL_TOOL" and tool_name:
+        try:
+            # Simulate tool call with provided scenario
+            payload = {"message": message, "user_id": "synthetic_user"}
+            tool_response = tools.call_tool(tool_name, payload, tool_scenario)
+            # Tool succeeded - keep CALL_TOOL as final action
+            return result
+        
+        except (tools.ToolTimeoutError, tools.ToolAuthError, tools.ToolDataError) as e:
+            # Tool failed - escalate with error details
+            return Result(result.intent, "ESCALATE", tool_error=str(e))
+    
+    return result
+
+
 def load_tests(path: str) -> List[Dict]:
     tests: List[Dict] = []
     with open(path, "r", encoding="utf-8") as f:
@@ -87,7 +126,11 @@ def main() -> None:
     failures = []
 
     for t in tests:
-        got = route(t["input"])
+        # Use agent_step to execute with tool simulation if needed
+        tool_name = t.get("tool_name")
+        tool_scenario = t.get("tool_scenario", "ok")
+        
+        got = agent_step(t["input"], tool_name, tool_scenario)
         ok = (got.intent == t["expected_intent"]) and (got.action == t["expected_action"])
         status = "PASS" if ok else "FAIL"
 
@@ -101,13 +144,18 @@ def main() -> None:
             by_category[category]["pass"] += 1
         else:
             by_category[category]["fail"] += 1
-            failures.append({
+            failure_info = {
                 "id": t["id"],
                 "category": category,
                 "input": t["input"],
                 "expected": {"intent": t["expected_intent"], "action": t["expected_action"]},
                 "got": {"intent": got.intent, "action": got.action},
-            })
+            }
+            if tool_scenario and tool_scenario != "ok":
+                failure_info["tool_scenario"] = tool_scenario
+            if got.tool_error:
+                failure_info["tool_error"] = got.tool_error
+            failures.append(failure_info)
 
         print(
             f'{status} {t["id"]} | expected=({t["expected_intent"]},{t["expected_action"]}) '

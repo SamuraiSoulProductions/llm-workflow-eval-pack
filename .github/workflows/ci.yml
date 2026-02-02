@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [ main, master ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   eval-pack:
     runs-on: ubuntu-latest
@@ -18,12 +25,16 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Compile Python files
+        run: python -m compileall .
+
       - name: Run evals
         run: python eval.py
 
       - name: Upload test report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: test-report
           path: report.json
+          if-no-files-found: ignore
