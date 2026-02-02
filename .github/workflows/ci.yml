@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
+    branches: [ main, master ]
   pull_request:
+    branches: [ main, master ]
 
 jobs:
   eval-pack:
@@ -18,3 +20,10 @@ jobs:
 
       - name: Run evals
         run: python eval.py
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-report
+          path: report.json

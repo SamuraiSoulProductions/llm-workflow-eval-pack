@@ -1,6 +1,12 @@
 import json
+import sys
 from dataclasses import dataclass
 from typing import Dict, List
+from collections import Counter, defaultdict
+
+
+# Configuration
+PASS_THRESHOLD = 100.0  # Minimum pass percentage required (0-100)
 
 
 @dataclass
@@ -70,26 +76,75 @@ def load_tests(path: str) -> List[Dict]:
             tests.append(json.loads(line))
     return tests
 
-
 def main() -> None:
     tests = load_tests("tests.jsonl")
     passed = 0
+
+    by_category = defaultdict(lambda: {"pass": 0, "fail": 0})
+    action_counts = Counter()
+    intent_counts = Counter()
+
+    failures = []
 
     for t in tests:
         got = route(t["input"])
         ok = (got.intent == t["expected_intent"]) and (got.action == t["expected_action"])
         status = "PASS" if ok else "FAIL"
 
+        category = t.get("category", "uncategorized")
+
+        action_counts[got.action] += 1
+        intent_counts[got.intent] += 1
+
         if ok:
             passed += 1
+            by_category[category]["pass"] += 1
+        else:
+            by_category[category]["fail"] += 1
+            failures.append({
+                "id": t["id"],
+                "category": category,
+                "input": t["input"],
+                "expected": {"intent": t["expected_intent"], "action": t["expected_action"]},
+                "got": {"intent": got.intent, "action": got.action},
+            })
 
         print(
             f'{status} {t["id"]} | expected=({t["expected_intent"]},{t["expected_action"]}) '
             f'got=({got.intent},{got.action})'
         )
 
-    print(f"\nSummary: {passed}/{len(tests)} passed")
+    total = len(tests)
+    pct = (passed / total) * 100.0
 
+    print("\n=== Summary ===")
+    print(f"Score: {passed}/{total} ({pct:.1f}%)")
+
+    print("\n=== By category ===")
+    for cat, stats in sorted(by_category.items()):
+        print(f"- {cat}: {stats['pass']} pass / {stats['fail']} fail")
+
+    print("\n=== Action distribution ===")
+    for action, n in action_counts.most_common():
+        print(f"- {action}: {n}")
+
+    # Write machine-readable report
+    report = {
+        "score": {"passed": passed, "total": total, "percent": pct},
+        "by_category": by_category,
+        "action_distribution": action_counts,
+        "intent_distribution": intent_counts,
+        "failures": failures,
+    }
+
+    with open("report.json", "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
+
+    print("\nWrote report.json")
+
+    if pct < PASS_THRESHOLD:
+        print(f"\nFAIL: score {pct:.1f}% below threshold {PASS_THRESHOLD:.1f}%")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
