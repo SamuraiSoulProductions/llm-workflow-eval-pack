@@ -26,7 +26,10 @@ jobs:
           python-version: "3.11"
 
       - name: Syntax check
-        run: python -m compileall .
+        run: python -m compileall -q .
+
+      - name: Security hygiene gate
+        run: python hygiene.py
 
       - name: Run evals
         run: python eval.py

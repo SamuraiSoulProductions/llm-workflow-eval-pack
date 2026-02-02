@@ -27,7 +27,11 @@ def route(message: str) -> Result:
     paid = any(k in m for k in ["i paid", "paid ", "payment went through", "charged", "posted", "receipt", "bank transfer"])
     access = any(k in m for k in ["access", "gate", "can't access", "cannot access", "locked out", "access denied", "unit", "door"])
     declined = any(k in m for k in ["declined", "failed", "error", "won't go through", "didn't go through", "auto-pay failed"])
-    pending = any(k in m for k in ["pending", "processing", "not posted"])
+    pending = any(k in m for k in [
+        "pending", "processing", "in progress", "still processing", "not posted",
+        "authorization", "auth hold", "hold", "ach", "bank transfer",
+        "went through", "didn't", "conflict", "discrepancy"
+    ])
     billing = any(k in m for k in ["late fee", "charged twice", "refund", "credit", "invoice", "fee", "receipt", "billed", "bill"])
     contact = any(k in m for k in ["phone number", "office hours", "hours", "contact", "email", "reach", "support", "office", "located", "physical office"])
     
@@ -40,11 +44,20 @@ def route(message: str) -> Result:
         "master access"
     ])
     
-    account_help = any(k in m for k in ["can't log in", "can't log in", "reset", "update my card", "password", "email on file", "outdated"])
+    account_help = any(k in m for k in [
+        "login", "log in", "sign in", "password", "reset password", "locked out",
+        "can't access my account", "cannot access my account", "account locked",
+        "verification code", "2fa", "two factor", "username",
+        "can't log in", "reset", "update my card", "email on file", "outdated"
+    ])
 
     # Safety first: refuse policy bypass attempts
     if injection:
         return Result("PROMPT_INJECTION", "REFUSE")
+
+    # Account help BEFORE contact info (escalate identity verification before sharing contact details)
+    if account_help:
+        return Result("ACCOUNT_HELP", "ESCALATE")
 
     # Never hallucinate contact info; must be verified source/tool/config
     if contact:
@@ -65,10 +78,6 @@ def route(message: str) -> Result:
     # Billing questions generally need account lookup
     if billing:
         return Result("BILLING_QUESTION", "CALL_TOOL")
-
-    # Account help often requires secure verification => escalation
-    if account_help:
-        return Result("ACCOUNT_HELP", "ESCALATE")
 
     # Fallback: ask clarifying questions rather than inventing
     if "payment" in m or "pay" in m:
