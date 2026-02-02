@@ -1,7 +1,7 @@
 # LLM Workflow Eval Pack
 
-[![CI](https://github.com/SamuraiSoulProductions/llm-workflow-eval-pack/actions/workflows/ci.yml/badge.svg)](https://github.com/SamuraiSoulProductions/llm-workflow-eval-pack/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/SamuraiSoulProductions/llm-workflow-eval-pack/actions/workflows/codeql.yml/badge.svg)](https://github.com/SamuraiSoulProductions/llm-workflow-eval-pack/actions/workflows/codeql.yml)
+![CI](https://github.com/SamuraiSoulProductions/llm-workflow-eval-pack/actions/workflows/ci.yml/badge.svg)
+![CodeQL](https://github.com/SamuraiSoulProductions/llm-workflow-eval-pack/actions/workflows/codeql.yml/badge.svg)
 
 A demonstration of **agent reliability and security engineering** through automated regression testing, tool failure handling, and prompt injection defense.
 
